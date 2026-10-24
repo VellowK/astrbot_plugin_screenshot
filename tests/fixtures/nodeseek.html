@@ -1,0 +1,18 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>NodeSeek 测试帖子</title></head><body>
+<nav>REMOVE_NAVIGATION</nav><aside>REMOVE_SIDEBAR</aside>
+<div class="nsk-post"><div class="content-item" id="0" data-comment-id="100">
+<h1 class="post-title">NodeSeek 正文与精选评论 · 本地测试</h1>
+<div class="nsk-content-meta-info"><a href="/space/1">楼主</a><time>2026-10-24</time></div>
+<article class="post-content"><h2>正文标题</h2><p>这是一条帖子正文，包含中文、链接和代码。仅用于验证截图布局，并非真实线上截图。</p>
+<p><a href="/post-123-1">相对链接</a> · <strong>保留加粗与列表</strong></p><ul><li>本地 Chromium 截图</li><li>帖子正文 + 置顶 / Hot 评论</li></ul>
+<pre><code>print('Hello, NodeSeek!')
+# 代码换行也要保留</code></pre>
+<span onclick="alert('bad')">TEXT_WITHOUT_HANDLER</span><script>window.fixtureScript=true;</script>
+<a href="javascript:alert(1)">UNSAFE_LINK_REMOVED</a><iframe src="http://127.0.0.1/"></iframe>
+</article></div></div>
+<div class="comment-container"><ul class="comments">
+<li id="1" data-comment-id="101" class="content-item"><div class="nsk-content-meta-info"><a href="/space/2">置顶用户</a><span class="pined-comment-badge">置顶</span></div><article class="post-content"><p>PINNED_COMMENT：这一条是置顶，必须出现在精选评论里。</p></article></li>
+<li id="2" data-comment-id="102" class="content-item"><div class="nsk-content-meta-info"><a href="/space/3">热门用户</a><span class="hot-badge">HOT</span></div><article class="post-content"><p>HOT_COMMENT：这一条是热评，也应该被保留。</p><blockquote>引用文字，验证排版效果。</blockquote></article></li>
+<li id="3" data-comment-id="103" class="content-item"><div class="nsk-content-meta-info"><a href="/space/4">普通用户</a></div><article class="post-content"><p>REMOVE_ORDINARY_COMMENT 即使正文提到 HOT，也不能被误选。</p><span class="hot-badge">HOT in body</span></article></li>
+<li id="4" data-comment-id="104" class="content-item"><div class="nsk-content-meta-info"><a href="/space/5">双标记用户</a><span class="pined-comment-badge">置顶</span><span class="hot-badge">HOT</span></div><article class="post-content"><p>BOTH_COMMENT 置顶并且热门的评论只出现一次。</p></article></li>
+</ul></div><footer>REMOVE_FOOTER</footer></body></html>
