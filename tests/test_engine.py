@@ -16,7 +16,8 @@ from astrbot_plugin_screenshot.engine import CaptureError, ScreenshotEngine
 class EngineTests(unittest.IsolatedAsyncioTestCase):
     async def test_document_slices_and_cleanup(self):
         settings = replace(Settings(), max_height=3000, slice_height=1200, settle_ms=0)
-        engine = ScreenshotEngine(settings)
+        provider = AsyncMock(return_value=None)
+        engine = ScreenshotEngine(settings, browser_provider=provider)
         page = MagicMock()
         page.goto = AsyncMock(
             return_value=MagicMock(status=200, headers={"content-type": "text/html"})
@@ -29,6 +30,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         context.new_page = AsyncMock(return_value=page)
         context.route = AsyncMock()
         context.route_web_socket = AsyncMock()
+        context.close = AsyncMock()
         browser = MagicMock()
         browser.new_context = AsyncMock(return_value=context)
         browser.close = AsyncMock()
@@ -60,6 +62,8 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context.new_page.await_count, 1)
         self.assertEqual(browser.new_context.call_args.kwargs["service_workers"], "block")
         browser.close.assert_awaited_once()
+        context.close.assert_awaited_once()
+        provider.assert_awaited_once()
         self.assertFalse(engine._active)
 
     async def test_invalid_urls_safe_errors(self):

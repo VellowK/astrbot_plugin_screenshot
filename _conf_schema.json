@@ -1,5 +1,12 @@
 {
   "enabled": {"description": "启用网页截图插件", "type": "bool", "default": true},
+  "auto_install_browser": {"description": "启动时自动准备 Chromium（无需前置插件）", "type": "bool", "default": true, "hint": "先检查并离线启动验证；缺少浏览器时后台运行官方 Playwright 安装器。首次需下载数百 MB；不会自动安装系统库或更改沙箱。保存后重载生效。"},
+  "browser_ready": {"description": "内置浏览器已就绪（自动勾选）", "type": "bool", "default": false, "hint": "运行状态，不是开关。只有浏览器启动、上下文代理与离线渲染验证成功才勾选；空闲休眠仍表示已就绪。刷新面板查看；手动勾选不能改变实际状态。"},
+  "browser_status": {"description": "浏览器准备状态（自动更新）", "type": "string", "default": "等待插件启动检查", "hint": "自动显示检查中、下载中、就绪或失败原因；请勿手工修改。安装失败时按提示处理后重载。"},
+  "browser_install_timeout": {"description": "每次浏览器下载超时秒数（60–1800）", "type": "int", "default": 600},
+  "browser_install_retries": {"description": "浏览器下载失败后的重试次数（0–3）", "type": "int", "default": 1, "hint": "仅启动准备阶段重试，间隔 30 秒；不是每条消息重下。"},
+  "browser_install_proxy": {"description": "浏览器下载代理（留空继承环境变量）", "type": "string", "default": "", "hint": "http(s)://[user:pass@]host:port，仅给官方安装器设置 HTTP_PROXY / HTTPS_PROXY，不支持 SOCKS。与网页截图的 proxy / routes_json 分开；可能含明文凭据，请限制面板访问。"},
+  "browser_idle_seconds": {"description": "浏览器空闲休眠秒数（0–3600）", "type": "int", "default": 120, "hint": "空闲后释放 Chromium，下次截图自动唤醒；有运行任务时不关闭。0 表示常驻。检查间隔最长 15 秒。"},
   "auto_enabled": {"description": "自动兜底解析消息中的网页链接", "type": "bool", "default": true, "hint": "优先级 -10000；已发送回复、停止事件或有处理标记时跳过。建议同时配置 skip_domains。"},
   "require_at": {"description": "自动兜底仅在被唤醒或 @ 时触发", "type": "bool", "default": false},
   "report_auto_errors": {"description": "自动解析失败时也回复错误信息", "type": "bool", "default": false},
@@ -20,5 +27,5 @@
   "max_comments": {"description": "NodeSeek 最多精选评论数量（0–20）", "type": "int", "default": 10, "hint": "只保留第一页可见的置顶和 Hot 评论，优先置顶。0 表示仅正文。"},
   "javascript": {"description": "允许网页运行 JavaScript", "type": "bool", "default": true, "hint": "部分动态网页依赖 JS；不可信链接建议放到隔离容器运行。此项关闭不影响插件自己的 DOM 提取。"},
   "no_sandbox": {"description": "禁用 Chromium 沙箱（不推荐）", "type": "bool", "default": false, "hint": "优先使用非 root 用户和可用沙箱。仅确有需要并有外部容器隔离时开启。"},
-  "executable_path": {"description": "Chromium/Chrome/Edge 可执行文件绝对路径（通常留空）", "type": "string", "default": "", "hint": "留空使用 Playwright 安装的 Chromium；系统浏览器版本兼容性需自行验证。不会自动下载浏览器。"}
+  "executable_path": {"description": "Chromium/Chrome/Edge 可执行文件绝对路径（通常留空）", "type": "string", "default": "", "hint": "留空使用自动准备的 Playwright Chromium。填写后只验证此路径，不替换或自动下载浏览器；系统浏览器版本兼容性需自行验证。"}
 }

@@ -63,6 +63,11 @@ class RouteRule:
 class Settings:
     enabled: bool = True
     auto_enabled: bool = True
+    auto_install_browser: bool = True
+    browser_install_timeout: int = 600
+    browser_install_retries: int = 1
+    browser_install_proxy: str = ""
+    browser_idle_seconds: int = 120
     require_at: bool = False
     report_auto_errors: bool = False
     proxy: str = ""
@@ -91,6 +96,7 @@ class Settings:
         for name in (
             "enabled",
             "auto_enabled",
+            "auto_install_browser",
             "require_at",
             "report_auto_errors",
             "javascript",
@@ -101,6 +107,9 @@ class Settings:
                 raise ConfigError(f"{name} 必须为布尔值。")
             result[name] = value
         limits = {
+            "browser_install_timeout": (60, 1800),
+            "browser_install_retries": (0, 3),
+            "browser_idle_seconds": (0, 3600),
             "max_links": (1, 3),
             "concurrency": (1, 2),
             "timeout": (10, 90),
@@ -126,6 +135,28 @@ class Settings:
         if not isinstance(value, str):
             raise ConfigError("proxy 必须为字符串。")
         result["proxy"] = proxy_url(value.strip())
+        value = config.get("browser_install_proxy", "")
+        if not isinstance(value, str):
+            raise ConfigError("browser_install_proxy 必须为字符串。")
+        value = value.strip()
+        if value:
+            try:
+                parsed = urlsplit(value)
+                if (
+                    parsed.scheme not in {"http", "https"}
+                    or not parsed.hostname
+                    or parsed.port is None
+                    or parsed.path not in {"", "/"}
+                    or parsed.query
+                    or parsed.fragment
+                    or any(c.isspace() for c in value)
+                ):
+                    raise ValueError
+            except ValueError as exc:
+                raise ConfigError(
+                    "browser_install_proxy 应为 http(s)://[user:pass@]host:port，不支持 SOCKS。"
+                ) from exc
+        result["browser_install_proxy"] = value
         raw_routes = config.get("routes_json", "[]")
         try:
             routes = json.loads(raw_routes)

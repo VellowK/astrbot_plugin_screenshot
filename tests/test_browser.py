@@ -1,6 +1,7 @@
 """Opt-in local Chromium/Edge tests. No NodeSeek network access required."""
 
 import asyncio
+import logging
 import os
 import struct
 import sys
@@ -11,6 +12,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from astrbot_plugin_screenshot.browser import BrowserRuntime
 from astrbot_plugin_screenshot.config import Settings
 from astrbot_plugin_screenshot.engine import CaptureError, ScreenshotEngine, nodeseek_html
 
@@ -21,19 +23,19 @@ BROWSER = os.environ.get("SCREENSHOT_TEST_BROWSER", "")
 @unittest.skipUnless(BROWSER, "Set SCREENSHOT_TEST_BROWSER to chromium or an executable path")
 class BrowserTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from playwright.async_api import async_playwright
-
-        self.pw = await async_playwright().start()
-        options = {} if BROWSER == "chromium" else {"executable_path": BROWSER}
-        try:
-            self.browser = await self.pw.chromium.launch(headless=True, **options)
-        except BaseException:
-            await self.pw.stop()
-            raise
-
-    async def asyncTearDown(self):
-        await self.browser.close()
-        await self.pw.stop()
+        settings = Settings(
+            executable_path="" if BROWSER == "chromium" else BROWSER,
+            auto_install_browser=False,  # Opt-in rendering tests still never download.
+            browser_idle_seconds=0,
+        )
+        self.config = {}
+        self.runtime = BrowserRuntime(settings, self.config, logger=logging.getLogger(__name__))
+        self.addAsyncCleanup(self.runtime.close)
+        await self.runtime.start()
+        await self.runtime._setup_task
+        self.assertTrue(self.runtime.ready, self.runtime.status)
+        self.assertTrue(self.config["browser_ready"])
+        self.browser = self.runtime._browser
 
     async def test_adapter_extract_and_sanitize(self):
         page = await self.browser.new_page()
@@ -62,7 +64,13 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(small["comments"][0]["pinned"])
 
     async def test_full_engine_local_fixture_and_slices(self):
-        # Only this test replaces outbound connections with a loopback fixture server.
+        await self._full_engine_fixture(shared=False)
+
+    async def test_shared_browser_fixture_isolation_and_gateway(self):
+        await self._full_engine_fixture(shared=True)
+
+    async def _full_engine_fixture(self, *, shared):
+        # Only these tests replace outbound connections with a loopback fixture server.
         # Production resolution and routing remain strict and are covered by test_core.
         fixture = (ROOT / "tests/fixtures/nodeseek.html").read_bytes()
 
@@ -83,7 +91,10 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
         server = await asyncio.start_server(handle, "127.0.0.1", 0)
         port = server.sockets[0].getsockname()[1]
 
+        connections = []
+
         async def fixture_connect(_gateway, _host, _port):
+            connections.append((_host, _port))
             return await asyncio.open_connection("127.0.0.1", port)
 
         settings = replace(
@@ -93,7 +104,15 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
             slice_height=900,
             max_height=4000,
         )
-        engine = ScreenshotEngine(settings)
+
+        # Leave an unrelated context alive in the owned process. A capture must
+        # neither borrow its cookies nor close it, and must use its own gateway.
+        existing = await self.browser.new_context()
+        await existing.add_cookies(
+            [{"name": "private", "value": "keep", "url": "http://www.nodeseek.com/"}]
+        )
+        provider = AsyncMock(return_value=self.runtime) if shared else None
+        engine = ScreenshotEngine(settings, browser_provider=provider)
         try:
             with (
                 TemporaryDirectory() as tmp,
@@ -105,6 +124,12 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
             ):
                 snapshot = await engine.capture("http://www.nodeseek.com/post-123-9", Path(tmp))
                 self.assertGreaterEqual(len(snapshot.paths), 2)
+                self.assertTrue(connections, "Shared context must use our guarded gateway")
+                self.assertTrue(self.browser.is_connected())
+                self.assertEqual(self.browser.contexts, [existing])
+                self.assertEqual((await existing.cookies())[0]["value"], "keep")
+                if shared:
+                    provider.assert_awaited_once()
                 for image in snapshot.paths:
                     raw = image.read_bytes()
                     self.assertEqual(raw[:8], b"\x89PNG\r\n\x1a\n")
@@ -119,6 +144,7 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
                 shutil.copyfile(snapshot.paths[0], target)
         finally:
             await engine.close()
+            await existing.close()
             server.close()
             await server.wait_closed()
 

@@ -103,7 +103,9 @@ def load_plugin(data_path):
     ):
         modules[name] = ModuleType(name)
     modules["astrbot.api"].AstrBotConfig = dict
-    modules["astrbot.api"].logger = SimpleNamespace(warning=lambda *args: None)
+    modules["astrbot.api"].logger = SimpleNamespace(
+        warning=lambda *args: None, info=lambda *args: None
+    )
     modules["astrbot.api.event"].AstrMessageEvent = Event
     modules["astrbot.api.event"].filter = SimpleNamespace(
         command=decorator,
@@ -139,6 +141,27 @@ class PluginTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.plugin.terminate()
         self.temp.cleanup()
+
+    async def test_owned_browser_wired_into_lifecycle_and_engine(self):
+        runtime = self.plugin.browser_runtime
+        runtime.start = AsyncMock()
+        await self.plugin.initialize()
+        runtime.start.assert_awaited_once()
+        self.assertIs(await self.plugin.engine.browser_provider(), runtime)
+        calls = []
+
+        async def close_engine():
+            calls.append("captures")
+
+        async def close_browser():
+            calls.append("browser")
+
+        with (
+            patch.object(self.plugin.engine, "close", AsyncMock(side_effect=close_engine)),
+            patch.object(runtime, "close", AsyncMock(side_effect=close_browser)),
+        ):
+            await self.plugin.terminate()
+        self.assertEqual(calls, ["captures", "browser"])
 
     async def test_low_priority(self):
         self.assertEqual(self.plugin.fallback.filter_options[1]["priority"], -10000)
@@ -259,7 +282,8 @@ class PluginTests(unittest.IsolatedAsyncioTestCase):
             Settings.load({key: item["default"] for key, item in schema.items()}), Settings()
         )
         self.assertEqual(
-            set(schema) - {"routes_json"}, set(Settings.__dataclass_fields__) - {"routes"}
+            set(schema) - {"routes_json", "browser_ready", "browser_status"},
+            set(Settings.__dataclass_fields__) - {"routes"},
         )
 
 

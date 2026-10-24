@@ -1,12 +1,14 @@
-"""Local, isolated Chromium snapshots. No remote screenshot service or browser profile."""
+"""Isolated snapshots using an owned browser runtime, never a persistent profile."""
 
 import asyncio
 import math
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .browser import BrowserUnavailable, launch_options
 from .config import Settings
 from .gateway import Gateway
 from .policy import UnsafeURL, capture_url, nodeseek_url, normalize_url, resolve_public, selectable
@@ -71,8 +73,9 @@ def nodeseek_html(data: dict, source: str) -> str:
 
 
 class ScreenshotEngine:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, browser_provider=None):
         self.settings = settings
+        self.browser_provider = browser_provider
         self._semaphore = asyncio.Semaphore(settings.concurrency)
         self._active: set[asyncio.Task] = set()
         self._closed = False
@@ -109,48 +112,57 @@ class ScreenshotEngine:
         finally:
             self._active.discard(task)
 
-    async def _capture(self, url: str, directory: Path) -> Snapshot:
+    @asynccontextmanager
+    async def _browser(self, gateway_address):
+        service = await self.browser_provider() if self.browser_provider is not None else None
+        if service is not None:
+            try:
+                # The owned runtime wakes an idle browser; each capture owns its context.
+                async with service.operation() as browser:
+                    yield browser
+            except (CaptureError, TimeoutError):
+                raise
+            except BrowserUnavailable as exc:
+                raise CaptureError(str(exc)) from exc
+            except Exception as exc:
+                raise CaptureError(
+                    "内置浏览器截图失败；请检查浏览器状态、网络与代理配置。不会绕过安全网关。"
+                ) from exc
+            return
         try:
             from playwright.async_api import async_playwright
         except ImportError as e:
             raise CaptureError("缺少 Playwright；请安装插件依赖和 Chromium，详见 README。") from e
         settings = self.settings
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(**launch_options(settings, gateway_address))
+            try:
+                yield browser
+            finally:
+                await browser.close()
+
+    async def _capture(self, url: str, directory: Path) -> Snapshot:
+        settings = self.settings
         parsed = urlsplit(url)
-        # Fail before starting Chromium for plainly unsafe targets.
+        # Fail before acquiring either browser backend for plainly unsafe targets.
         await resolve_public(
             parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
         )
         directory.mkdir(parents=True, exist_ok=True)
-        async with Gateway(settings) as gateway, async_playwright() as pw:
-            args = [
-                "--proxy-bypass-list=<-loopback>",
-                "--disable-quic",
-                "--disable-background-networking",
-                "--disable-component-update",
-                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-                "--disable-features=DnsOverHttps,WebTransport",
-            ]
-            if settings.no_sandbox:
-                args.append("--no-sandbox")
-            launch = dict(
-                headless=True,
-                args=args,
-                proxy={"server": gateway.address},
-                chromium_sandbox=not settings.no_sandbox,
+        async with Gateway(settings) as gateway, self._browser(gateway.address) as browser:
+            # Fresh context and mandatory per-capture proxy, even on a reused process.
+            # If context proxy support fails, never remove the proxy and connect direct.
+            context = await browser.new_context(
+                viewport={"width": settings.width, "height": 900},
+                device_scale_factor=1,
+                locale="zh-CN",
+                timezone_id="Asia/Shanghai",
+                accept_downloads=False,
+                service_workers="block",
+                java_script_enabled=settings.javascript,
+                proxy={"server": gateway.address, "bypass": "<-loopback>"},
             )
-            if settings.executable_path:
-                launch["executable_path"] = settings.executable_path
-            browser = await pw.chromium.launch(**launch)
             try:
-                context = await browser.new_context(
-                    viewport={"width": settings.width, "height": 900},
-                    device_scale_factor=1,
-                    locale="zh-CN",
-                    timezone_id="Asia/Shanghai",
-                    accept_downloads=False,
-                    service_workers="block",
-                    java_script_enabled=settings.javascript,
-                )
                 context.set_default_timeout(10000)
                 context.on("dialog", lambda dialog: asyncio.create_task(dialog.dismiss()))
                 await context.route_web_socket("**/*", lambda ws: ws.close())
@@ -249,7 +261,8 @@ class ScreenshotEngine:
                     note += "；部分资源因访问策略被阻止"
                 return Snapshot(paths, note)
             finally:
-                await browser.close()
+                # Runtime owns the process; this capture owns only its context.
+                await asyncio.wait_for(context.close(), timeout=5)
 
     async def _settle_images(self, page):
         # Trigger nearby lazy images without endlessly scrolling an infinite feed.

@@ -9,11 +9,12 @@ from astrbot.api.message_components import Image, Plain
 from astrbot.api.star import Context, Star
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from .browser import BrowserRuntime
 from .config import Settings
 from .engine import CaptureError, ScreenshotEngine
 from .fallback import Reservations, candidates, public_label
 
-HELP = """网页截图（本机 Chromium，不使用截图 API）
+HELP = """网页截图（内置 Chromium 管理；不需要浏览器前置插件或截图 API）
 • 直接发送 HTTP(S) 链接：其他解析器未处理时自动兜底。
 • /截图 https://example.com：手动截图，可覆盖自动跳过域名，但不能绕过访问策略。
 • /截图 帮助：显示帮助。
@@ -26,12 +27,18 @@ class ScreenshotPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.settings = Settings.load(config)
-        self.engine = ScreenshotEngine(self.settings)
+        self.browser_runtime = BrowserRuntime(self.settings, config, logger=logger)
+        self.engine = ScreenshotEngine(
+            self.settings, browser_provider=self.browser_runtime.get_service
+        )
         self.reservations = Reservations(self.settings)
         self.root = (
             Path(get_astrbot_data_path()) / "plugin_data" / "astrbot_plugin_screenshot" / "cache"
         )
         self.root.mkdir(parents=True, exist_ok=True)
+
+    async def initialize(self):
+        await self.browser_runtime.start()
 
     def _session_allowed(self, event) -> bool:
         return (
@@ -136,4 +143,6 @@ class ScreenshotPlugin(Star):
             event.stop_event()
 
     async def terminate(self):
+        # Cancel captures first so their contexts finish before the browser closes.
         await self.engine.close()
+        await self.browser_runtime.close()

@@ -1,7 +1,7 @@
 [project]
 name = "astrbot-plugin-screenshot"
-version = "1.0.2"
-description = "AstrBot 本地网页快照兜底解析器，支持 NodeSeek 正文与置顶/Hot 评论、代理和域名路由。"
+version = "1.1.0"
+description = "AstrBot 网页快照兜底解析器，内置 Chromium 自动准备与状态检测，支持 NodeSeek 正文与置顶/Hot 评论、代理和域名路由。"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = ["playwright>=1.48,<2", "python-socks[asyncio]>=2.5,<4"]
