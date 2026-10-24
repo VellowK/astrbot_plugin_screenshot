@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -199,6 +200,14 @@ class PluginTests(unittest.IsolatedAsyncioTestCase):
         self.plugin.reservations.settings = self.plugin.settings
         await self.plugin.fallback(Event("https://a.example/ https://b.example/"))
         self.assertEqual(self.plugin.engine.capture.await_count, 2)
+
+    async def test_dependency_manifests_match(self):
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(requirements, project["dependencies"])
+        self.assertIn(
+            "version: v" + project["version"], (ROOT / "metadata.yaml").read_text(encoding="utf-8")
+        )
 
     async def test_schema_defaults_match_settings(self):
         from astrbot_plugin_screenshot.config import Settings

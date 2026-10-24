@@ -29,7 +29,7 @@
 2. 在 **AstrBot 实际使用的 Python 环境** 中安装 Python 依赖。通常 AstrBot 会根据插件依赖文件安装；必要时手动执行：
 
    ```bash
-   python -m pip install 'playwright>=1.48,<2' 'python-socks[asyncio]>=2.5,<3'
+   python -m pip install 'playwright>=1.48,<2' 'python-socks[asyncio]>=2.5,<4'
    ```
 
 3. 安装浏览器（Python 包安装不会自动完成这一步）：
@@ -45,6 +45,10 @@
    ```
 
 4. 重载插件，打开插件配置页面，按需设置代理和跳过域名，再发送链接测试。
+
+### 从 v1.0.0 升级
+
+v1.0.1 修正了 `python-socks` 依赖上限，兼容 AstrBot 4.29.1 核心固定的 `python-socks==3.1.1`。若安装或重载时看到 `<3` 与 `==3.1.1` 冲突，请先更新插件代码到 v1.0.1，再在插件面板重载失败插件；不要降级核心依赖或关闭其版本保护。
 
 ### Docker / Linux 注意事项
 

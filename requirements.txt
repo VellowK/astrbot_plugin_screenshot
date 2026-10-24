@@ -1,2 +1,2 @@
 playwright>=1.48,<2
-python-socks[asyncio]>=2.5,<3
+python-socks[asyncio]>=2.5,<4
