@@ -4,6 +4,7 @@ import time
 from urllib.parse import urlsplit
 
 from .config import Settings
+from .cooperation import response_seen
 from .policy import capture_url, extract_urls, selectable
 
 WHOLE_FLAGS = ("screenshot_handled", "url_parser_handled", "link_parser_handled")
@@ -12,7 +13,7 @@ URL_FLAGS = ("handled_urls", "parsed_urls", "screenshot_handled_urls")
 
 def event_handled(event) -> bool:
     # _has_send_oper is an AstrBot implementation detail, so use it only conservatively.
-    if event.is_stopped() or getattr(event, "_has_send_oper", False):
+    if event.is_stopped() or response_seen(event) or getattr(event, "_has_send_oper", False):
         return True
     if any(event.get_extra(key, False) for key in WHOLE_FLAGS):
         return True
