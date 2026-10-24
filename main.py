@@ -39,9 +39,22 @@ class ScreenshotPlugin(Star):
             or event.unified_msg_origin in self.settings.allowed_sessions
         )
 
+    @staticmethod
+    def _is_self_message(event: AstrMessageEvent) -> bool:
+        sender_id = event.get_sender_id()
+        self_id = event.get_self_id()
+        # Adapters can expose numeric IDs as either integers or strings.
+        # Missing IDs must not cause unrelated messages to be discarded.
+        if sender_id is None or self_id is None:
+            return False
+        sender_id, self_id = str(sender_id).strip(), str(self_id).strip()
+        return bool(sender_id and self_id and sender_id == self_id)
+
     @filter.command("截图")
     async def screenshot(self, event: AstrMessageEvent):
         """手动截取指定网页，或显示帮助。"""
+        if self._is_self_message(event):
+            return
         event.set_extra("screenshot_command", True)
         if not self._session_allowed(event):
             return
@@ -60,7 +73,8 @@ class ScreenshotPlugin(Star):
     async def fallback(self, event: AstrMessageEvent):
         settings = self.settings
         if (
-            not settings.enabled
+            self._is_self_message(event)
+            or not settings.enabled
             or not settings.auto_enabled
             or not self._session_allowed(event)
             or event.get_extra("screenshot_command", False)

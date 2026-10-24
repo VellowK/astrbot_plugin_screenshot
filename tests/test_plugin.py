@@ -41,7 +41,9 @@ def decorator(*args, **kwargs):
 
 
 class Event:
-    def __init__(self, text="https://example.com/"):
+    def __init__(self, text="https://example.com/", *, sender_id="1", self_id="bot"):
+        self.sender_id = sender_id
+        self.self_id = self_id
         self.message_str = text
         self.unified_msg_origin = "test:GroupMessage:1"
         self.is_at_or_wake_command = False
@@ -58,7 +60,10 @@ class Event:
         return self.extra.get(key, default)
 
     def get_sender_id(self):
-        return "1"
+        return self.sender_id
+
+    def get_self_id(self):
+        return self.self_id
 
     def get_result(self):
         return None
@@ -146,6 +151,43 @@ class PluginTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(event.extra["screenshot_handled"])
         self.assertTrue(event.files)
         self.assertTrue(all(not path.exists() for path in event.files))
+
+    async def test_self_messages_ignored_at_both_entry_points(self):
+        for handler, text in (
+            (self.plugin.fallback, "https://example.com/"),
+            (self.plugin.screenshot, "/截图 https://example.com/"),
+            (self.plugin.screenshot, "/截图 帮助"),
+        ):
+            for sender_id, self_id in (("bot", "bot"), (123, "123"), ("123", 123)):
+                with self.subTest(handler=handler.__name__, text=text, ids=(sender_id, self_id)):
+                    self.plugin.reservations = type(self.plugin.reservations)(self.plugin.settings)
+                    self.plugin.engine.capture.reset_mock()
+                    event = Event(text, sender_id=sender_id, self_id=self_id)
+                    await handler(event)
+                    self.plugin.engine.capture.assert_not_awaited()
+                    self.assertFalse(event.sent)
+                    self.assertFalse(event.stopped)
+                    self.assertEqual(event.extra, {})
+
+    async def test_non_self_or_unknown_ids_not_suppressed(self):
+        for handler, text in (
+            (self.plugin.fallback, "https://example.com/"),
+            (self.plugin.screenshot, "/截图 https://example.com/"),
+        ):
+            for sender_id, self_id in (
+                ("user", "bot"),
+                ("", ""),
+                (None, None),
+                ("user", ""),
+                ("", "bot"),
+            ):
+                with self.subTest(handler=handler.__name__, ids=(sender_id, self_id)):
+                    self.plugin.reservations = type(self.plugin.reservations)(self.plugin.settings)
+                    self.plugin.engine.capture.reset_mock()
+                    event = Event(text, sender_id=sender_id, self_id=self_id)
+                    await handler(event)
+                    self.plugin.engine.capture.assert_awaited_once()
+                    self.assertTrue(event.sent)
 
     async def test_previous_response_not_repeated(self):
         for sent in (True, False):

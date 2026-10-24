@@ -1,7 +1,7 @@
 name: astrbot_plugin_screenshot
 display_name: 网页快照兜底解析
 desc: 本地 Chromium 网页截图兜底解析器，支持 NodeSeek 正文与置顶/Hot 评论、HTTP/SOCKS5 代理及域名路由。
-version: v1.0.1
+version: v1.0.2
 author: VellowK
 repo: https://github.com/VellowK/astrbot_plugin_screenshot
 astrbot_version: ">=4.16,<5"
